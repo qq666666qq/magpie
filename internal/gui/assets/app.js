@@ -3298,13 +3298,15 @@ async function load(again) {
     paintUpdateAll(true);
     loadCLIs(); // after the rows, never holding them up
     loadInstalls();
-    if (mode === "panel") { renderPanelQuota(); loadQuotas(); }
+    // Opening a panel already on Allowances is asking to see them now,
+    // just as picking that tab is; other tabs keep an ordinary read.
+    if (mode === "panel") { renderPanelQuota(); loadQuotas(panelTab === "usage"); }
     // an open provider editor is someone typing: coming back to the window
     // must not rebuild it under them
     if ((view === "providers" || view === "gateway") && !(editing || adding)) await loadProviders();
-    // the window back on the Usage page reads the tab shown as its own timer
-    // does: drawn again only on a change, with no skeleton between
-    if (view === "usage") await (again && usageDrawn() ? refreshUsage() : loadUsage());
+    // Opening Usage asks for the allowances now, while keeping unchanged
+    // charts in place on a return, with no skeleton between.
+    if (view === "usage") await (again && usageDrawn() ? refreshUsage(true) : loadUsage(true));
     // so is an open sync form (WebDAV, export, import): its passwords are
     // never sent back, so a rebuild would empty it
     if (view === "settings" && !syncOpen) await loadSettings();
@@ -14614,7 +14616,7 @@ if (mode === "panel") {
 }
 let panelTab = "agents";
 try { panelTab = localStorage.getItem("magpie.panelTab") || "agents"; } catch {}
-function setPanelTab(tab) {
+function setPanelTab(tab, asked = false) {
   const tabs = $("#ptabs");
   // no usage to show, no tab for it (nor for profiles: they open from the foot)
   const b = tabs.querySelector(`[data-ptab="${tab}"]`);
@@ -14636,6 +14638,9 @@ function setPanelTab(tab) {
   // the tab remembered is drawn as the page loads, before what the tab is drawn with,
   // further down, is set: a microtask later, when all of it is
   queueMicrotask(panelUseShown);
+  // A click asks for a fresh allowance, even when this tab was already
+  // selected. Redraws and card-focus restoration don't ask again.
+  if (asked && tab === "usage") queueMicrotask(() => loadQuotas(true));
   fit();
 }
 // Scroll to a requested card, or resume its highlight after a redraw.
@@ -14712,7 +14717,7 @@ function panelQuotaFocus(id) {
   // a cell for a subscription the tab hides shows its card all the same
   panelPeek = id;
   panelArranging = false;
-  setPanelTab("usage");
+  setPanelTab("usage", true);
   renderPanelQuota();
   requestAnimationFrame(focusQuotaCard);
 }
@@ -14723,7 +14728,7 @@ if (mode === "panel") {
   tabs.setAttribute("role", "tablist");
   for (const b of tabs.querySelectorAll("button")) {
     b.setAttribute("role", "tab");
-    b.onclick = () => setPanelTab(b.dataset.ptab);
+    b.onclick = () => setPanelTab(b.dataset.ptab, true);
   }
   setPanelTab(panelTab);
   // the bar drawn before the panel has its width puts the card again, still;
